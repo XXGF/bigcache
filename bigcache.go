@@ -18,7 +18,7 @@ type BigCache struct {
 	clock        clock
 	hash         Hasher
 	config       Config
-	shardMask    uint64
+	shardMask    uint64           // 等于shards的容量 -1，是用来做取余操作，看hashcode落在shards的哪个位置
 	maxShardSize uint32
 	close        chan struct{}
 }

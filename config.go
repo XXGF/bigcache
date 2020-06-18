@@ -5,6 +5,9 @@ import "time"
 // Config for BigCache
 type Config struct {
 	// Number of cache shards, value must be a power of two
+	// 这里的Shards为什么一定要是2的幂次方呢？见：
+	// https://blog.csdn.net/u012898245/article/details/91039215cc
+	// https://blog.csdn.net/LLF_1241352445/article/details/81321991
 	Shards int
 	// Time after which entry can be evicted
 	LifeWindow time.Duration

@@ -16,8 +16,8 @@ type Metadata struct {
 }
 
 type cacheShard struct {
-	hashmap     map[uint64]uint32
-	entries     queue.BytesQueue
+	hashmap     map[uint64]uint32   // key: key的hashcode  value:是整个entry在queue.BytesQueue存储的index【entry包含ts、key的hash、key的size、key、value 】
+	entries     queue.BytesQueue    // 真正存储value的地方，
 	lock        sync.RWMutex
 	entryBuffer []byte
 	onRemove    onRemoveCallback
@@ -26,7 +26,7 @@ type cacheShard struct {
 	statsEnabled bool
 	logger       Logger
 	clock        clock
-	lifeWindow   uint64
+	lifeWindow   uint64             // LifeWindow is a time. After that time, an entry can be called dead but not deleted.
 
 	hashmapStats map[uint64]uint32
 	stats        Stats

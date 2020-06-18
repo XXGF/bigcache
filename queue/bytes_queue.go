@@ -25,13 +25,13 @@ var (
 // BytesQueue is a non-thread safe queue type of fifo based on bytes array.
 // For every push operation index of entry is returned. It can be used to read the entry later
 type BytesQueue struct {
-	array           []byte
+	array           []byte   // 真正存储value
 	capacity        int
-	maxCapacity     int
-	head            int
-	tail            int
-	count           int
-	rightMargin     int
+	maxCapacity     int      // queue的最大容量，达到这个容量之后不可再自增
+	head            int      // 头index
+	tail            int      // 尾index
+	count           int      // entry数量
+	rightMargin     int      // 永远指向queue的尾部
 	headerBuffer    []byte
 	verbose         bool
 	initialCapacity int
@@ -89,6 +89,7 @@ func (q *BytesQueue) Push(data []byte) (int, error) {
 	return index, nil
 }
 
+// 进行内存扩充
 func (q *BytesQueue) allocateAdditionalMemory(minimum int) {
 	start := time.Now()
 	if q.capacity < minimum {
@@ -102,12 +103,19 @@ func (q *BytesQueue) allocateAdditionalMemory(minimum int) {
 	oldArray := q.array
 	q.array = make([]byte, q.capacity)
 
+	// 每次扩容，都会重新调整head和tail的位置，保持head在前，tail在后，原来的tail-->head之前的位置，会用空的[]byte填充，以保证已有的entry的index不变
+	// leftMarginIndex != q.rightMargin 表示queue不是空队列
+	// rightMargin 总是指向queue的尾部【Tail不总是指向queue的尾部，有时候会排到head的前面去】
 	if leftMarginIndex != q.rightMargin {
+		// 旧队列的内容复制到新队列
 		copy(q.array, oldArray[:q.rightMargin])
-
+		// q.tail < q.head 表示tail和head之前有空的内存
 		if q.tail < q.head {
 			emptyBlobLen := q.head - q.tail - headerEntrySize
+			// tail和head之间填充空的[]byte
 			q.push(make([]byte, emptyBlobLen), emptyBlobLen)
+			// 让head重新指向queue的头部，让tail重新指向queue的尾部
+			// 然后原来的tail-->head之间的位置，填充空的[]byte，以保证原来的entry的index不变
 			q.head = leftMarginIndex
 			q.tail = q.rightMargin
 		}
@@ -227,12 +235,14 @@ func (q *BytesQueue) availableSpaceAfterTail() int {
 	if q.tail >= q.head {
 		return q.capacity - q.tail
 	}
-	return q.head - q.tail - minimumEmptyBlobSize
+	// 如果这里够，就不会执行 availableSpaceBeforeHead 了
+	return q.head - q.tail - minimumEmptyBlobSize      // minimumEmptyBlobSize 是为了保证tail不和head相遇
 }
 
 func (q *BytesQueue) availableSpaceBeforeHead() int {
 	if q.tail >= q.head {
 		return q.head - leftMarginIndex - minimumEmptyBlobSize
 	}
+	// 这里肯定是不够的，如果够，也不会进来这里了
 	return q.head - q.tail - minimumEmptyBlobSize
 }
