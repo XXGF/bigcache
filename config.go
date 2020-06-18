@@ -8,19 +8,19 @@ type Config struct {
 	// 这里的Shards为什么一定要是2的幂次方呢？见：
 	// https://blog.csdn.net/u012898245/article/details/91039215cc
 	// https://blog.csdn.net/LLF_1241352445/article/details/81321991
-	Shards int
+	Shards int  // 分片总数
 	// Time after which entry can be evicted
-	LifeWindow time.Duration
+	LifeWindow time.Duration   // entry过期时间
 	// Interval between removing expired entries (clean up).
 	// If set to <= 0 then no action is performed. Setting to < 1 second is counterproductive — bigcache has a one second resolution.
-	CleanWindow time.Duration
+	CleanWindow time.Duration  // 定时清理过期的entry，如果设置为小于等于0的值，则不清理缓存
 	// Max number of entries in life window. Used only to calculate initial size for cache shards.
 	// When proper value is set then additional memory allocation does not occur.
-	MaxEntriesInWindow int
+	MaxEntriesInWindow int    // entry总数的最大数量，只是用来初始化
 	// Max size of entry in bytes. Used only to calculate initial size for cache shards.
-	MaxEntrySize int
+	MaxEntrySize int          // 每个Value的大小，只是用来初始化
 	// StatsEnabled if true calculate the number of times a cached resource was requested.
-	StatsEnabled bool
+	StatsEnabled bool         // 开启之后，统计查询击中bigCache的次数
 	// Verbose mode prints information about new memory allocation
 	Verbose bool
 	// Hasher used to map between string keys and unsigned 64bit integers, by default fnv64 hashing is used.
@@ -29,7 +29,7 @@ type Config struct {
 	// It can protect application from consuming all available memory on machine, therefore from running OOM Killer.
 	// Default value is 0 which means unlimited size. When the limit is higher than 0 and reached then
 	// the oldest entries are overridden for the new ones.
-	HardMaxCacheSize int
+	HardMaxCacheSize int  // 所有Shards加起来的最大容量，即BigCache的总容量
 	// OnRemove is a callback fired when the oldest entry is removed because of its expiration time or no space left
 	// for the new entry, or because delete was called.
 	// Default value is nil which means no callback and it prevents from unwrapping the oldest entry.
@@ -74,6 +74,7 @@ func (c Config) initialShardSize() int {
 	return max(c.MaxEntriesInWindow/c.Shards, minimumEntriesInShard)
 }
 
+// 获取每个Shard的最大容量，这个容量是定死的，如果queue自增到这个容量，就会停止自增，转去删除最老的元素，即使没有过期
 // maximumShardSize computes maximum shard size
 func (c Config) maximumShardSize() int {
 	maxShardSize := 0

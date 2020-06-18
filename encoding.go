@@ -20,6 +20,8 @@ func wrapEntry(timestamp uint64, hash uint64, key string, entry []byte, buffer *
 	}
 	blob := *buffer
 
+	// 使用 binary.LittleEndian.PutUint64 是为了定长存储，保证存储的值要占够对应的字节数
+	// https://yq.aliyun.com/articles/515937
 	binary.LittleEndian.PutUint64(blob, timestamp)
 	binary.LittleEndian.PutUint64(blob[timestampSizeInBytes:], hash)
 	binary.LittleEndian.PutUint16(blob[timestampSizeInBytes+hashSizeInBytes:], uint16(keyLength))
@@ -57,6 +59,7 @@ func readHashFromEntry(data []byte) uint64 {
 	return binary.LittleEndian.Uint64(data[timestampSizeInBytes:])
 }
 
+// 这里只是将 key的hash 重置为0
 func resetKeyFromEntry(data []byte) {
 	binary.LittleEndian.PutUint64(data[timestampSizeInBytes:], 0)
 }

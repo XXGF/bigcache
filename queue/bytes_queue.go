@@ -25,7 +25,7 @@ var (
 // BytesQueue is a non-thread safe queue type of fifo based on bytes array.
 // For every push operation index of entry is returned. It can be used to read the entry later
 type BytesQueue struct {
-	array           []byte   // 真正存储value
+	array           []byte   // 真正存储value，block的size:block[ts:hash:key_length:key:value]
 	capacity        int
 	maxCapacity     int      // queue的最大容量，达到这个容量之后不可再自增
 	head            int      // 头index
@@ -70,6 +70,7 @@ func (q *BytesQueue) Reset() {
 // Push copies entry at the end of queue and moves tail pointer. Allocates more space if needed.
 // Returns index for pushed data or error if maximum size queue limit is reached.
 func (q *BytesQueue) Push(data []byte) (int, error) {
+	// 获取block的size
 	dataLen := len(data)
 
 	if q.availableSpaceAfterTail() < dataLen+headerEntrySize {
@@ -84,6 +85,7 @@ func (q *BytesQueue) Push(data []byte) (int, error) {
 
 	index := q.tail
 
+	// 将block和block的size放到q.array，且q.tail后移，如果tail在head之后，右边界跟着tail后移
 	q.push(data, dataLen)
 
 	return index, nil
@@ -128,14 +130,19 @@ func (q *BytesQueue) allocateAdditionalMemory(minimum int) {
 
 func (q *BytesQueue) push(data []byte, len int) {
 	binary.LittleEndian.PutUint32(q.headerBuffer, uint32(len))
+	// 将block的size放到q.array，且q.tail后移
 	q.copy(q.headerBuffer, headerEntrySize)
-
+	// 将block放到q.array，且tail后移
 	q.copy(data, len)
 
+	// 如果tail在head之后
 	if q.tail > q.head {
+		// 右边界也要跟着tail后移
 		q.rightMargin = q.tail
 	}
+	// 如果tail在head之前，不用处理右边界
 
+	// 数量+1
 	q.count++
 }
 
@@ -144,20 +151,30 @@ func (q *BytesQueue) copy(data []byte, len int) {
 }
 
 // Pop reads the oldest entry from queue and moves head pointer to the next one
+// Pop 只是head指针越过该block，并未物理删除
 func (q *BytesQueue) Pop() ([]byte, error) {
+	// data：是block的数据
+	// size：是block的大小
 	data, size, err := q.peek(q.head)
 	if err != nil {
 		return nil, err
 	}
 
+	// head移动到下一个block
 	q.head += headerEntrySize + size
+	// 数量减1
 	q.count--
 
+	// 如果head到达右边界
 	if q.head == q.rightMargin {
+		// 让head指向左边界
 		q.head = leftMarginIndex
+		// 如果tail也到达右边界，说明queue空了，让tail也指向左边界
 		if q.tail == q.rightMargin {
 			q.tail = leftMarginIndex
 		}
+		// 如果queue为空，让左右边界重合
+		// 如果queue未空，让右边界指向tail
 		q.rightMargin = q.tail
 	}
 

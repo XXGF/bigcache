@@ -62,12 +62,14 @@ func (it *EntryInfoIterator) SetNext() bool {
 	it.valid = false
 	it.currentIndex++
 
+	// 这是第0个Shard，在cache.Iterator()的时候返回
 	if it.elementsCount > it.currentIndex {
 		it.valid = true
 		it.mutex.Unlock()
 		return true
 	}
 
+	// 从1开始，每次获取一个Shard
 	for i := it.currentShard + 1; i < it.cache.config.Shards; i++ {
 		it.elements, it.elementsCount = it.cache.shards[i].copyKeys()
 
@@ -85,6 +87,7 @@ func (it *EntryInfoIterator) SetNext() bool {
 }
 
 func newIterator(cache *BigCache) *EntryInfoIterator {
+	// elements里面是index
 	elements, count := cache.shards[0].copyKeys()
 
 	return &EntryInfoIterator{
@@ -100,11 +103,13 @@ func newIterator(cache *BigCache) *EntryInfoIterator {
 func (it *EntryInfoIterator) Value() (EntryInfo, error) {
 	it.mutex.Lock()
 
+	// 已经遍历到底了
 	if !it.valid {
 		it.mutex.Unlock()
 		return emptyEntryInfo, ErrInvalidIteratorState
 	}
 
+	// 这里取到的是整个block，包含block的size
 	entry, err := it.cache.shards[it.currentShard].getEntry(int(it.elements[it.currentIndex]))
 
 	if err != nil {

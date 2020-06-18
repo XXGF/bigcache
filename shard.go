@@ -23,12 +23,12 @@ type cacheShard struct {
 	onRemove    onRemoveCallback
 
 	isVerbose    bool
-	statsEnabled bool
+	statsEnabled bool              // 开启之后，统计查询击中bigCache的次数
 	logger       Logger
 	clock        clock
 	lifeWindow   uint64             // LifeWindow is a time. After that time, an entry can be called dead but not deleted.
 
-	hashmapStats map[uint64]uint32
+	hashmapStats map[uint64]uint32  // 记录查询次数，key是key的hash，value是key的查询次数
 	stats        Stats
 }
 
@@ -106,16 +106,19 @@ func (s *cacheShard) set(key string, hashedKey uint64, entry []byte) error {
 
 	s.lock.Lock()
 
+	// 如果key的hash已经在hashmap中存在
 	if previousIndex := s.hashmap[hashedKey]; previousIndex != 0 {
 		if previousEntry, err := s.entries.Get(int(previousIndex)); err == nil {
 			resetKeyFromEntry(previousEntry)
 		}
 	}
 
+	// 取最老entry【即队头entry】，如果过期，则删除
 	if oldestEntry, err := s.entries.Peek(); err == nil {
 		s.onEvict(oldestEntry, currentTimestamp, s.removeOldestEntry)
 	}
 
+	// 封装block，不包含block的size
 	w := wrapEntry(currentTimestamp, hashedKey, key, entry, &s.entryBuffer)
 
 	for {
@@ -124,6 +127,7 @@ func (s *cacheShard) set(key string, hashedKey uint64, entry []byte) error {
 			s.lock.Unlock()
 			return nil
 		}
+		// 如果执行到这里，说明queue达到了最大容量，不可再自控扩容，只能淘汰队头元素【不过期也删除】
 		if s.removeOldestEntry(NoSpace) != nil {
 			s.lock.Unlock()
 			return fmt.Errorf("entry is bigger than max shard size")
@@ -195,6 +199,7 @@ func (s *cacheShard) onEvict(oldestEntry []byte, currentTimestamp uint64, evict 
 func (s *cacheShard) cleanUp(currentTimestamp uint64) {
 	s.lock.Lock()
 	for {
+		// 从head开始，因为是先进先出的队列，所以最老的元素肯定是在前面
 		if oldestEntry, err := s.entries.Peek(); err != nil {
 			break
 		} else if evicted := s.onEvict(oldestEntry, currentTimestamp, s.removeOldestEntry); !evicted {
@@ -231,6 +236,9 @@ func (s *cacheShard) copyKeys() (keys []uint32, next int) {
 	return keys, next
 }
 
+// 0.head指针指向下一个block【并未物理删除】
+// 1.删除hashmap的entry
+// 2.删除hashmapStats的entry
 func (s *cacheShard) removeOldestEntry(reason RemoveReason) error {
 	oldest, err := s.entries.Pop()
 	if err == nil {
@@ -320,7 +328,7 @@ func initNewShard(config Config, callback onRemoveCallback, clock clock) *cacheS
 		isVerbose:    config.Verbose,
 		logger:       newLogger(config.Logger),
 		clock:        clock,
-		lifeWindow:   uint64(config.LifeWindow.Seconds()),
+		lifeWindow:   uint64(config.LifeWindow.Seconds()),    // entry的过期时间
 		statsEnabled: config.StatsEnabled,
 	}
 }

@@ -13,13 +13,13 @@ const (
 // It keeps entries on heap but omits GC for them. To achieve that, operations take place on byte arrays,
 // therefore entries (de)serialization in front of the cache will be needed in most use cases.
 type BigCache struct {
-	shards       []*cacheShard
-	lifeWindow   uint64
-	clock        clock
-	hash         Hasher
-	config       Config
-	shardMask    uint64           // 等于shards的容量 -1，是用来做取余操作，看hashcode落在shards的哪个位置
-	maxShardSize uint32
+	shards       []*cacheShard  // 分片
+	lifeWindow   uint64         // entry的过期时间
+	clock        clock          // 用于获取当前系统时间
+	hash         Hasher         // 哈希器
+	config       Config         // 配置
+	shardMask    uint64         // 等于shards的容量 -1，是用来做取余操作，看hashcode落在shards的哪个位置
+	maxShardSize uint32         // 每个Shard大小，即每个Shard中最多存几个key，只是用来初始化
 	close        chan struct{}
 }
 
@@ -31,6 +31,9 @@ type Response struct {
 // RemoveReason is a value used to signal to the user why a particular key was removed in the OnRemove callback.
 type RemoveReason uint32
 
+// iota
+// https://blog.golang.org/constants
+// https://segmentfault.com/a/1190000000656284
 const (
 	// Expired means the key is past its LifeWindow.
 	// @TODO: Go defaults to 0 so in case we want to return EntryStatus back to the caller Expired cannot be differentiated
@@ -83,6 +86,7 @@ func newBigCache(config Config, clock clock) (*BigCache, error) {
 		cache.shards[i] = initNewShard(config, onRemove, clock)
 	}
 
+	// 定时清理过期的entry，如果设置为小于等于0的值，则不清理缓存
 	if config.CleanWindow > 0 {
 		go func() {
 			ticker := time.NewTicker(config.CleanWindow)
